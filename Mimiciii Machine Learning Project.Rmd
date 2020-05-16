@@ -1,0 +1,1358 @@
+---
+title: "Final Project Using Mimic iii Data"
+author: "Amber Bianco"
+date: "5/15/2020"
+output:  
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github 
+editor_options: 
+  chunk_output_type: console
+  
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	comment = NULL
+)
+
+library(caret)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(plyr)
+library(glmnet) #l1 regularizard logistic regression
+library(rpart.plot)
+library(randomForest)
+library(ROCR)
+library(mlbench)
+library(pscl)
+library(performance)
+library(prettydoc)
+
+```
+
+## IMPORTING DATA
+
+```{r read csv file}
+setwd("/Users/amber/Downloads/614")
+
+data_respiratoryillness <- read.csv("data_respiratoryillness.csv", stringsAsFactors = TRUE)
+
+data1 = data_respiratoryillness
+```
+
+## ANALYSIS
+
+
+### EXPLORATORY ANALYSIS
+
+    - 1. Perform data cleaning.
+
+```{r}
+
+
+summary(data1)
+data2<-data1
+str(data1$icd9_list)
+#Checking for Nas
+sum(is.na(data1)) # # 26312 NAs in data set
+
+sum(is.na(data2)) # 26312 NAs in data set
+
+#Viewing the structure of the data
+str(data1)
+
+
+# Converting ages that are over 89 to 90 and 0 to NA
+
+#875 people age over 89
+data2$age[which(data2$age>89)]<-90
+data2$age[which(data2$age==0)]<-NA
+
+
+# Change some character variables to factor variables
+data2 = data2 %>% mutate_if(is.character,factor)
+data2$dead<-as.factor(data2$dead)
+
+
+
+#Make mortality variable
+data2$mortality<- (data2$discharge_location == "DEAD/EXPIRED") %>% as.factor
+
+
+```
+
+
+
+### REDUCING LEVELS 
+
+
+### REDUCING RELIGION LEVELS
+```{r religion}
+
+# reducing levels in  religion
+
+data2=mutate(data2,
+            religion = revalue(religion,
+                               c ("OTHER" = "OTHER",
+                                  "GREEK ORTHODOX" = "OTHER",
+                                  "EPISCOPALIAN" = "OTHER",
+                                  "7TH DAY ADVENTIST" = "OTHER",
+                                  "BAPTIST" = "OTHER",
+                                  "BUDDHIST" = "OTHER", 
+                                  "CHRISTIAN SCIENTIST"= "OTHER",
+                                  "HEBREW"= "OTHER",
+                                  "HINDU"= "OTHER",
+                                  "JEHOVAH'S WITNESS"= "OTHER", 
+                                  "LUTHERAN"= "OTHER", 
+                                  "METHODIST"= "OTHER",
+                                  "MUSLIM"= "OTHER", 
+                                  "ROMANIAN EAST. ORTH"= "OTHER",
+                                  "UNITARIAN-UNIVERSALIST"= "OTHER")))
+
+# made religion into smaller categories by putting all religions with under 1000 people into "OTHER"
+
+
+
+#Viewing data before and after removing subcategories
+table(data1$religion)
+table(data2$religion)
+
+#Plot of main_religion
+
+# Change character variables to factor variables
+data2 = data2 %>% mutate_if(is.character,factor)
+
+
+
+
+
+```
+
+### REDUCING ETHNICITY LEVELS
+```{r ethnicity}
+
+# reduce levels in ethnicity
+
+data2=mutate(data2,
+             ethnicity = revalue(ethnicity,
+                                 c( "HISPANIC OR LATINO" = "HISPANIC",
+                                    "HISPANIC/LATINO - CENTRAL AMERICAN (OTHER)" = "HISPANIC",
+                                    "HISPANIC/LATINO - COLOMBIAN"="HISPANIC",
+                                    "HISPANIC/LATINO - CUBAN"="HISPANIC",
+                                    "HISPANIC/LATINO - DOMINICAN"="HISPANIC",
+                                    "HISPANIC/LATINO - GUATEMALAN"="HISPANIC",
+                                    "HISPANIC/LATINO - MEXICAN"="HISPANIC",
+                                    "HISPANIC/LATINO - PUERTO RICAN"="HISPANIC",
+                                    "HISPANIC/LATINO - SALVADORAN"="HISPANIC",
+                                    c("ASIAN" = "ASIAN",
+                                      "ASIAN - ASIAN INDIAN" = "ASIAN",
+                                      "ASIAN - CAMBODIAN"="ASIAN",
+                                      "ASIAN - CHINESE"="ASIAN",
+                                      "ASIAN - FILIPINO"="ASIAN",
+                                      "ASIAN - JAPANESE"="ASIAN",
+                                      "ASIAN - KOREAN"="ASIAN",
+                                      "ASIAN - OTHER"="ASIAN",
+                                      "ASIAN - VIETNAMESE"="ASIAN",
+                                      c("BLACK/AFRICAN" = "BLACK",
+                                        "BLACK/AFRICAN AMERICAN" = "BLACK",
+                                        "BLACK/CAPE VERDEAN"="BLACK",
+                                        "BLACK/HAITIAN"="BLACK",
+                                        c( "WHITE" = "WHITE",
+                                           "WHITE - BRAZILIAN" = "WHITE",
+                                           "WHITE - EASTERN EUROPEAN"="WHITE",
+                                           "WHITE - OTHER EUROPEAN"="WHITE",
+                                           "WHITE - RUSSIAN"="WHITE",
+                                           c( "OTHER" = "OTHER",
+                                              "AMERICAN INDIAN/ALASKA NATIVE" = "OTHER",
+                                              "AMERICAN INDIAN/ALASKA NATIVE FEDERALLY RECOGNIZED TRIBE" = "OTHER",
+                                              "MIDDLE EASTERN" = "OTHER",
+                                              "NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER" = "OTHER",
+                                              "MULTI RACE ETHNICITY" = "OTHER",
+                                              "PORTUGUESE" = "OTHER",
+                                              "SOUTH AMERICAN" = "OTHER",
+                                              c( "UNABLE TO OBTAIN" = "NOT SPECIFIED",
+                                                 "UNKNOWN/NOT SPECIFIED" = "NOT SPECIFIED",
+                                                 "PATIENT DECLINED TO ANSWER" = "NOT SPECIFIED"))))))))
+
+#Categories with less than 1000 observations placed into "OTHER" category
+
+#Viewing the levels of data 1 and data 2
+levels(data2$ethnicity)
+data1$ethnicity %>% as.factor %>% levels
+
+
+
+
+
+```
+
+### REDUCING DISCHARGE LOCATION LEVELS
+```{r discharge_location}
+
+# reduce levels in discharge location
+
+
+data2=mutate(data2,
+            discharge_location = revalue(discharge_location,
+                               c ("DISC-TRAN CANCER/CHLDRN H" = "OTHER",
+                                  "DISC-TRAN TO FEDERAL HC" = "OTHER",
+                                  "DISCH-TRAN TO PSYCH HOSP" = "OTHER",
+                                  "HOME WITH HOME IV PROVIDR" = "OTHER",
+                                  "HOSPICE-HOME" = "OTHER",
+                                  "HOSPICE-MEDICAL FACILITY" = "OTHER", 
+                                  "ICF"= "OTHER",
+                                  "LEFT AGAINST MEDICAL ADVI"= "OTHER",
+                                  "OTHER FACILITY"= "OTHER",
+                                  "SHORT TERM HOSPITAL"= "OTHER",
+                                  c( "SNF" = "SNF",
+                                     "SNF-MEDICAID ONLY CERTIF" = "SNF"))))
+
+#Categories with less than 1000 observations placed into "OTHER" category
+
+
+
+levels(data2$discharge_location)
+table(data2$discharge_location)
+
+```
+
+### REDUCING ADMISSION LOCATION LEVELS
+```{r admission_location}
+# reduce levels in admission_location
+table(data2$admission_location)
+
+data2=mutate(data2,
+            admission_location = revalue(admission_location,
+                               c ("** INFO NOT AVAILABLE **" = "OTHER",
+                                  "TRANSFER FROM OTHER HEALT" = "OTHER",
+                                  "TRANSFER FROM SKILLED NUR" = "OTHER")))
+
+#Categories with less than 900 observations placed into "OTHER" category
+#( 900 because wanted to keep divored)
+
+levels(data2$discharge_location)
+```
+
+### REDUCING MARITAL STATUS LEVELS
+```{r marital status}
+
+
+str(data2$marital_status)
+# reduce levels in marital_status
+table(data2$marital_status)
+
+data2=mutate(data2,
+            marital_status = revalue(marital_status,
+                               c ("LIFE PARTNER" = "OTHER",
+                                  "SEPARATED" = "OTHER",
+                                  "UNKNOWN (DEFAULT)" = "OTHER")))
+# had to change back to categorical in order to remove NA column
+
+data2$marital_status<-as.character(data2$marital_status)
+
+data2$marital_status<-recode_factor(data2$marital_status,
+              `DIVORCED` = "DIVORCED",
+              `OTHER` = "OTHER",
+              `MARRIED` = "MARRIED",
+              `SINGLE`="SINGLE",
+              `WIDOWED`="WIDOWED",
+              .missing = "NOT INFORMED")
+
+#changed back to factor variable
+data2$marital_status<-as.factor(data2$marital_status)
+
+summary(data2$marital_status)
+levels(data2$marital_status)
+
+
+
+
+
+```
+
+### REDUCING LONG TITLE LEVELS 
+```{r long_title }
+glimpse(data2$long_title)
+table(data2$long_title)
+
+data2=mutate(data2,
+            long_title = revalue(long_title,
+                               c ("Acute bronchitis" = "OTHER",
+                                  "Acute bronchitis,Acute respiratory failure" = "OTHER",
+                                  "Acute bronchitis,Chronic airway obstruction, not elsewhere classified "= "OTHER",
+                                  "Acute bronchitis,Chronic respiratory failure"= "OTHER",
+                                  "Acute bronchitis,Pneumonia, organism unspecified " = "OTHER",
+                                  "Acute pharyngitis"= "OTHER",
+                                  "Acute pharyngitis,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Acute pharyngitis,Pneumonia, organism unspecified"= "OTHER",
+                                  "Acute pharyngitis,Pneumonia, organism unspecified,Acute respiratory failure" = "OTHER",
+                                  "Acute respiratory failure,Acute bronchitis"= "OTHER",
+                                  " Acute respiratory failure,Acute pharyngitis"= "OTHER",
+                                  "Acute respiratory failure,Chronic airway obstruction, not elsewhere classified,Pneumonia, organism unspecified"= "OTHER",
+                                  "Acute respiratory failure,Chronic airway obstruction, not elsewhere classified,Pulmonary congestion and hypostasis,Pneumonia, organism unspecified" = "OTHER",
+                                  "Acute respiratory failure,Chronic respiratory failure"= "OTHER",
+                                  "Acute respiratory failure,Pneumonia, organism unspecified,Acute bronchitis"= "OTHER",
+                                  "Acute respiratory failure,Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified"= "OTHER",
+                                  "Acute respiratory failure,Pulmonary congestion and hypostasis"= "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Acute respiratory failure,Pneumonia, organism unspecified"= "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Acute respiratory failure,Pulmonary congestion and hypostasis"= "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Chronic respiratory failure"= "OTHER", 
+                                  "Chronic airway obstruction, not elsewhere classified,Pneumonia, organism unspecified,Acute bronchitis"= "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Pneumonia, organism unspecified,Acute respiratory failure" = "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Pneumonia, organism unspecified,Chronic respiratory failure" = "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Pulmonary congestion and hypostasis"= "OTHER",
+                                  "Chronic respiratory failure,Chronic airway obstruction, not elsewhere classified"= "OTHER",
+                                  "Chronic respiratory failure,Pneumonia, organism unspecified" = "OTHER",
+                                  "Chronic respiratory failure,Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified"= "OTHER",
+                                  "Chronic respiratory failure,Pulmonary congestion and hypostasis" = "OTHER",
+                                  "Pneumonia, organism unspecified,Acute bronchitis"= "OTHER",
+                                  "Pneumonia, organism unspecified,Acute respiratory failure"= "OTHER",
+                                  "Pneumonia, organism unspecified,Acute pharyngitis"= "OTHER",
+                                  "Pneumonia, organism unspecified,Acute respiratory failure,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Pulmonary congestion and hypostasis,Chronic airway obstruction, not elsewhere classified,Acute respiratory failure"= "OTHER",
+                                  "Pulmonary congestion and hypostasis,Chronic respiratory failure,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Acute bronchitis,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Acute bronchitis,Pneumonia, organism unspecified" = "OTHER",
+                                  "OTHER" = "OTHER",
+                                  "Acute respiratory failure,Acute pharyngitis" = "OTHER",
+                                  "Acute respiratory failure,Pulmonary congestion and hypostasis,Pneumonia, organism unspecified" = "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Chronic respiratory failure,Pulmonary congestion and hypostasis" = "OTHER",
+                                  "Pneumonia, organism unspecified,Acute respiratory failure,Pulmonary congestion and hypostasis" = "OTHER",
+                                  "Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified,Acute bronchitis" = "OTHER",
+                                  "Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified,Chronic respiratory failure" = "OTHER",
+                                  "Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified,Acute respiratory failure " = "OTHER",
+                                  "Pneumonia, organism unspecified,Chronic respiratory failure" = "OTHER",
+                                  "Pneumonia, organism unspecified,Pneumonia, organism unspecified" = "OTHER",
+                                  "Pulmonary congestion and hypostasis" = "OTHER",
+                                  "Pulmonary congestion and hypostasis,Acute respiratory failure" = "OTHER",
+                                  "Pulmonary congestion and hypostasis,Acute respiratory failure,Chronic airway obstruction, not elsewhere classified " = "OTHER",
+                                  "Pulmonary congestion and hypostasis,Acute respiratory failure,Pneumonia, organism unspecified" = "OTHER",
+                                  "Other" = "OTHER",
+                                  "Acute respiratory failure,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Acute respiratory failure,Pneumonia, organism unspecified" = "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Acute respiratory failure" = "OTHER",
+                                  "Chronic airway obstruction, not elsewhere classified,Pneumonia, organism unspecified" = "OTHER",
+                                  "Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Pneumonia, organism unspecified,Chronic airway obstruction, not elsewhere classified,Acute respiratory failure" = "OTHER",
+                                  "Pneumonia, organism unspecified,Pulmonary congestion and hypostasis" = "OTHER",
+                                  "Pulmonary congestion and hypostasis,Acute respiratory failure,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                  "Pulmonary congestion and hypostasis,Chronic airway obstruction, not elsewhere classified" = "OTHER",
+                                "Chronic respiratory failure" = "OTHER",
+                                c ( "Chronic airway obstruction, not elsewhere classified" = "Chronic Airway Obstruction",
+                                c ( "Pneumonia, organism unspecified" = "Pneumonia",
+                                c ( "Acute respiratory failure" = "Acute Respiratory Failure"))))))
+                                  
+#Categories with less than 1000 observations placed into "OTHER" category 
+#Remaining rename for easy viewing on graphs
+
+data2$long_title<-as.factor(data2$long_title)
+table(data2$long_title)
+
+```
+
+
+Variable with under 1000 people categories into smaller categories by putting all religions  into "OTHER". One exception  was marital_status "DIVORCED" category. "DIVORCED" had over 900 observations and necessary to leave in  due to commmon sense of how many people worldwide are divorced
+
+
+## MAKING NEW DATA WITHOUT NAs  & DROPPING UNWANTED VARIABLES
+
+```{r  dropping variables, omitting NAs, making new csv of cleaned data}
+#Reviewing the dimensions and structure of data2 
+dim(data2) #13604 observations    26 (25 variables plus "X" clolumn)
+str(data2)
+
+#Viewing how many NAs in deathtime
+sum(is.na(data2$deathtime)) # 10987
+summary(data2)
+
+# Counting NAs in each column of data2
+sapply(data2, function(x) sum(is.na(x)))
+
+
+#making new data set without NA
+data3 <- data2
+
+        
+# Removing unwanted variables
+
+remove_vars<- c('X','hadm_id','subject_id','dischtime','deathtime','edregtime',
+                'edouttime','has_chartevents_data','dod','first_admittime',
+               'icd9_list', 'diagnosis', 'short_title', 'dead')
+        #removing these variables(not meaningful)
+
+
+
+# Change some character variables to factor variables
+#data2 = data2 %>% mutate_if(is.character,factor)
+
+data3 <- select(data2,!remove_vars) # left with 14 variables for modeling
+count(is.na(data3))
+
+#summary of new data
+summary(data3)
+
+
+#changing "NOT SPECIFIED" to NA based on common sense
+
+data3$religion[is.na(data3$religion)]<-"NOT SPECIFIED"
+
+#levels(data3$religion)
+#discharge_location
+
+data3$discharge_location[is.na(data3$discharge_location)]<-"OTHER"
+
+
+
+data3$religion[is.na(data3$religion)]<-"NOT SPECIFIED"
+
+
+
+
+summary(data3)
+table(data3$religion)
+dim(data3) #13604 observations    13 variables
+
+#New data base
+data4<-data3
+str(data4)
+#making new csv of cleaned data
+#write.csv(data4,"mimic_cleaned_data.csv", row.names = FALSE)
+
+
+#table(data3$discharge_location)
+#levels(data3$discharge_location)
+#Steps
+  #view str of var
+str(data4)
+summary(data4)
+
+data3 <- na.omit(data3) 
+summary(data3)
+#is.na(data3)
+
+
+
+# NOT SPECIFIED is actually missing values, so able to remove for better modeling.
+
+```
+
+
+## SUMMARY OF CLEANED DATA SET
+    
+    - 2. Display summary information on the data.
+
+
+```{r}
+
+summary(data4)
+glimpse(data4)
+
+```
+
+
+
+## PLOTS
+
+    - 3. Create visualizations of the distributions of key variables by the response variable. (Ex: colored by mortality.
+    - 4. Create visualizations of a couple of relationships you find interesting between variables
+(ex: scatter plot colored by mortality).
+
+## CORRELATION PLOT OF VARIABLES
+
+```{r cor plot}
+data_cor<-data4[,-8]
+data_cor %>% data.matrix() %>% data.frame() %>%
+  cor() %>% corrplot::corrplot(type='upper')
+
+
+```
+The correlation plot displays that factors affecting mortality are admission type, age, long_title (disease name), and comorbidities.
+This plot displays that within the data set, mortaltiy is not affected by ethnicity, insurance, religion, gender, admission_location, marital_status or length of stay.
+
+
+
+
+
+```{r visualizations}
+
+
+#visualizations
+
+main_religion = data4 %>% dplyr::count(religion, sort=TRUE)%>% filter(n>100) %>% data.frame()%>% droplevels()
+
+
+#Plot of Age Distribution VS Resp Disease boxplot
+ggplot(data=data4)+ geom_boxplot(aes(x=long_title, y= age, fill = long_title))+
+ labs(title="Age Distribution VS Resp Disease", x="", y="Age") +
+   theme(plot.title = element_text(hjust = 0.5))+
+  coord_flip() +
+    scale_fill_brewer(palette="Dark2")
+
+
+
+
+#Plot of Age Distribution VS Resp Disease by Gender
+ggplot(data=data4)+ geom_boxplot(aes(x=long_title, y= age,color=gender))+
+ labs(title="Age Distribution VS Resp Disease by Gender", x="", y="Age") +
+   theme(plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+
+
+
+```
+
+###SUMMARY OF PLOTS:
+
+Plot of Age Distribution VS Resp Disease boxplot:  
+  Pneumonia: Most people with pneumonia in data set between the ages of 55-80. The median age about 68 years old.
+Chronic Airway Obstructions: Most people with Chronic Airway Obstruction in data set between the ages of 65-80.  The median age about73 years old.
+Acute Respiratory Failure: Most people with Acute respirtory illness   in data set between the ages of 53-78.  The median age about 65 years old.
+Other:Most people with Other respiratory illnesses in data set between the ages of 58-80.  The median age about 70 years old.
+Most people in this data set with respiratory illnesses are  older 50 years old.  The ages 60-80 has high population of respirtory illness.The chronic airway obstruction group also has people 25-40 years old. This could suggest the younger people coming in could has been born with respirtory illnesses. 
+
+Plot of Age Distribution VS Resp Disease by Gender:
+Men are entering the hospital younger than women in all 4 repiratory illness categories. 
+The median age for women is slightly higher in each category -even in the "OTHER" category
+My prediction from this:the people in our data, are at high risk for covid necause they are already susceptible to respiratory illness due to their age 
+
+
+
+
+### MORTALITY PLOTS
+```{r}
+
+library(plotly) # make ggplot interactive
+data4 %>% dplyr:: count(mortality)
+# proportionally more dead than alive
+
+data4 %>% dplyr:: count(gender)%>% mutate(percent=n/sum(n))
+# More men than women
+#54% Men
+#46% Women
+
+gender_death<-data4 %>% dplyr:: count(gender,mortality)%>% group_by(gender)%>% mutate(percent=round(n/sum(n),3))
+
+
+#Plot of gender death proportions for respirtory illness
+ggplot(data=gender_death)+ geom_col(aes(x=gender, y= percent,fill=mortality), position = "dodge")+
+ labs(title=" Proportion of Death by Gender ", x="Death", y="Percent") +
+   theme(plot.title = element_text(hjust = 0.5))
+
+
+
+
+#admission_type version
+data4 %>% dplyr::count (admission_type, sort= TRUE) # count of admission types
+
+#1 EMERGENCY      12170
+#2 ELECTIVE        1074
+#3 URGENT           360
+
+
+data4 %>% dplyr::count (admission_type, mortality, sort= TRUE) # count of deadin admission types
+
+#1 EMERGENCY      FALSE      9704
+#2 EMERGENCY      TRUE       2466
+#3 ELECTIVE       FALSE       995
+#4 URGENT         FALSE       288
+#5 ELECTIVE       TRUE         79
+#6 URGENT         TRUE         72
+
+
+
+#proportions of dead/alive in admission type
+admission_deaths<-data4 %>% dplyr::count (admission_type, mortality, sort= TRUE)%>% group_by(admission_type)%>% mutate(percent=round(n/sum(n),3))
+
+
+
+
+ggplot(data=admission_deaths)+ geom_col(aes(x=admission_type, y= percent,fill=mortality), position = "dodge")+
+ labs(title=" Proportion of Death by Admssion Type ", x="Death", y="Percent") +
+   theme(plot.title = element_text(hjust = 0.5))
+
+
+
+
+#count of age
+data4 %>% dplyr::count (age, sort= TRUE) # count of age
+#875 people 90yr or older , with next highest at 11 people at 63.7yrs old,75.2,75.6
+
+
+data4 %>% dplyr::count (age, mortality, sort= TRUE) # count of dead by age
+# 651 people died that were 90yrs or older, only 224 90yrs or older lived
+
+#proportions of deaths by age
+deaths_by_age<-data4 %>% dplyr::count (age, mortality, sort= TRUE)%>% group_by(mortality)%>% mutate(percent=round(n/sum(n),3))
+
+
+
+
+###what effect is death rate on marital status
+
+
+#count of marital status
+data4 %>% dplyr::count (marital_status, sort= TRUE) # count of marital status
+
+
+
+data4 %>% dplyr::count (marital_status, mortality, sort= TRUE) # count of dead by marital_status
+
+#proportions of deaths by marital status
+deaths_by_marital_status<-data4 %>% dplyr::count (marital_status, mortality)%>% group_by(marital_status)%>% mutate(percent=round(n/sum(n),3))
+
+#plot of deaths_by_marital_status
+
+ggplot(data=deaths_by_marital_status)+ geom_col(aes(x=marital_status, y= percent,fill=mortality), position = "dodge")+
+ labs(title=" Proportion of Death by Marital Status ", x="Death", y="Percent") +
+   theme(plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+
+
+
+
+
+#long_title<- what effect is death rate
+#count of long title
+data4 %>% dplyr::count (long_title, sort= TRUE) # count of long_title
+#dead by long_title
+#1 Acute Respiratory Failure   4848
+#2 OTHER                       3122
+#3 Chronic Airway Obstruction  2928
+#4 Pneumonia                   2706
+
+
+data4 %>% dplyr::count (long_title, mortality, sort= TRUE) # count of 
+
+#proportions of deaths by long_title
+deaths_by_disease<-data4 %>% dplyr::count (long_title, mortality, sort= TRUE)%>% group_by(long_title)%>% mutate(percent=round(n/sum(n),3))
+
+
+#Acute Respiratory Failure  TRUE       1299
+#OTHER                      TRUE        758
+#Pneumonia                  TRUE        342
+#Chronic Airway Obstruction TRUE        218
+
+
+
+#plot of deaths_by_long_title
+
+ggplot(data=deaths_by_disease)+ geom_col(aes(x=long_title, y= percent,fill=mortality), position = "dodge")+
+ labs(title=" Proportion of Death by Respiratory Disease ", x="Death", y="Percent") +
+   theme(plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+
+
+
+
+
+#comorbidities<- what effect is death rate
+
+
+#count of comorbidities
+data4 %>% dplyr::count (comorbidities, sort= TRUE) # count of comorbidities
+# 1             9  2466
+# 2            14   734
+# 3            13   697
+# 4            15   693
+# 5            12   680
+# 6            16   664
+# 7            17   649
+# 8            11   609
+# 9             8   580
+#10            18   573
+
+
+
+
+data4 %>% dplyr::count (comorbidities, mortality, sort= TRUE) # count of 
+
+#proportions of deaths by number of comorbidities
+deaths_by_comorbidities<-data4 %>% dplyr::count (comorbidities, mortality, sort= TRUE)%>% group_by(comorbidities)%>% mutate(percent=round(n/sum(n),3))
+
+#plot of deaths_by_comorbidities
+
+
+#
+ggplot(data=deaths_by_comorbidities)+ geom_col(aes(x=comorbidities, y= percent,fill=mortality), position = "dodge")+
+ labs(title=" Proportion of Death by Comorbidities ", x="Number of Comorbidities", y="Percent") +
+   theme(plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+
+
+
+
+#ethnicity and death
+
+
+#count of comorbidities
+data4 %>% dplyr::count (ethnicity, sort= TRUE) # count of ethnicity
+# WHITE          9969
+# NOT SPECIFIED  1343
+# BLACK          1269
+# HISPANIC        373
+# OTHER           350
+# ASIAN           300
+
+
+
+data4 %>% dplyr::count (ethnicity, mortality, sort= TRUE)  
+
+#proportions of deaths by ethnicity
+deaths_by_ethnicity<-data4 %>% dplyr::count (ethnicity, mortality, sort= TRUE)%>% group_by(ethnicity)%>% mutate(percent=round(n/sum(n),3))
+
+#plot of deaths_by_comorbidities
+
+ggplot(data=deaths_by_ethnicity)+ geom_col(aes(x=ethnicity, y= percent,fill=mortality), position = "dodge")+
+ labs(title=" Proportion of Death by Ethnicity ", x="Ethnicity", y="Percent") +
+   theme(plot.title = element_text(hjust = 0.5))+
+  coord_flip()
+
+
+#Not much variation between ethnicities for mortality. 
+
+
+# MORTALITY AND AGE
+
+data4 %>% ggplot(aes(x=mortality, y=age, fill=mortality)) + geom_boxplot()
+
+
+# ANOTHER VIEW OF MORTALITY AND AGE
+data4 %>% ggplot(aes(x=mortality, y=age, fill=mortality)) + geom_violin() + geom_boxplot(width=0.1)
+
+
+data4 %>% ggplot(aes(x=age, y=log10(1+los), color=mortality)) + 
+  geom_point(alpha=0.3)
+
+
+
+
+
+```
+### SUMMARY OF MORTALITY PLOTS:
+Proportionally more dead than alive 
+-Plot of gender death proportions for respirtory illness
+  The proportion of death in both genders is about the same. Both men and women live about 80% and die about 20%.
+
+-admission_type version
+Most people in data set were admitted to the emergency room which makes sense with respirtory illnesses. People need may need medicinal support or help from respiratory equipment which makes sense why most would be admitted to the emergency room over elective or urgent care.
+
+
+The Emergency deparetment high the highest number of total people (over 12170) and  the highest number of deaths 2466.
+Much smaller population of people in elective care 1074 and urgent care 360.Lower number of deaths  in Elective care (79) and urgent care (72).
+
+
+-#proportions of dead/alive in admission type
+#Emergency and Urgent care had similar proportions of death of about 20%.
+#Only about a 7% mortalities in elective care.
+#Lower proportion of death in divorced and single individuals.
+#Higher proportion of death in married but also more people in data set.
+
+-ethnicity did not seem to affect mortality. Not much variation between the moratality rate between ethnicities. 15-20%.
+
+-count of age
+  875 people 90yr or older , with next highest at 11 people at 63.7yrs old,75.2,75.6
+
+-deaths_by_marital_status
+Highest is NOT Informed ( NAs people who did not answer)
+Second highest death rate is in the OTHER  category.
+Divorced had least amount of mortality.
+Of specific categories ( not: "other" or "not specified) Divorced, married, single or widowed - widowed had highest percentage of mortality. 
+No category stood out very much as they all have similar mortality percentages.
+
+-long_title (respiratory disease name)
+Most people in data set having diagnosis of Acute Respiratory failure. I am not surprised that more people entering with acute problem over chronic problem. Chronic problems are a slow progression whereas an acute problem can escalate quickly.
+#Acute respirtory faiure had highest percentage of mortality at 26.8%, the next highest is OTHER at 24.3% , Pneumonia third at 12.6% and chronic airway obstruction the least percentage of mortality at 7.4%
+The respiratory illness with the highest mortality count is Acute respiratory fairure. I am not surprised by this as acute problems are unexpected and unplanned and can often be riskier for death. When you have a chronic problem, you often are aware and managed by a doctor. Also often taking medications already. With antibiotics, I am also not surprised that less people die of pneumonia that an acute problem.
+
+-number of comorbidities
+9 comorbidities is the highest number in data set at 2466 people. Next highest is 14 comorbidites at 734 people. 
+People with the most comorbidities in data set ,40, have the highest percentage of death at 39.2%. 9 comorbidities had high percentage of deaths but also had the highest population in the data set.
+This higher the number of comorbidites, the higher chance of death in this data set.
+
+-age and mortality
+Plot displays most people in the data set are over 50 years old
+The median age for mortality was approxiamtely 73 years old. The median age for living was approximately 67. This suggests that the risk of death increases as you approach 70 years old. As length of stay and age increase, more mortality withint the population of the data set.
+
+
+
+
+
+
+ #modeling will support or reject this conclusion
+ 
+## MODELING
+
+### MAKING TEST AND TRAIN SET
+
+    - 5. Split your data into train and test sets.
+
+```{r Test and Train Sets}
+#randomly choosing sample
+#when choosing percent : want train bigger than test 
+
+set.seed(7)
+data4<-select(data4,-discharge_location) # removing discharge location because thats how I made mortality variable
+
+
+index<-createDataPartition(data4$mortality, p = 0.70, list = FALSE) #randomly choses 70% of indices from indices
+train_data<-data4[index ,]
+
+test_data<-data4[-index ,]
+
+
+trctrl <- trainControl(method = "cv", number = 3, verboseIter = TRUE,
+                       summaryFunction = twoClassSummary, classProbs = TRUE) #3 fold cross validation
+summary(train_data$mortality)# Alive:  7691   Dead: 1832
+summary(test_data$mortality) # Alive: 3296   Dead: 785 
+
+
+
+```
+
+
+### LOGISTIC REGRESSION 
+
+    - 6. Fit and evaluate a logistic regression or an elastic net model. Be sure to include regularization and evaluate with pseudo R2 and AIC/BIC. Consider providing a plot to visualize relationships revealed by your model.
+
+
+
+```{r logistic regression}
+
+set.seed(7)
+#two tuning paramaters (alpha, lambda) and set up grid
+grid<-expand.grid(alpha=seq(0,1,0.5),lambda=(seq(0.1,0.3,0.1)))
+
+#elastic net model in caret package
+e_net<-train(mortality ~., method='glmnet', trainControl=trctrl,tuneGrid=grid,metric='Kappa', data= train_data)
+
+
+e_net$bestTune#use object$bestTune 
+# alpha 0  lambda 0.1
+
+#matrix
+x<-data.matrix(train_data[,-12])
+y<-as.factor(train_data$mortality)
+
+best_enet<-glmnet(x,y, alpha = 0, lambda = 0.1, family = 'binomial') 
+  
+coef(best_enet)
+# Summary not easy to interpret and limiting information
+#Not able to eliminate any variables using elastic net
+
+
+
+#logistic regression model with all variables
+#glm() can easily view summary
+glm1<-glm(mortality~.,data=train_data, family= 'binomial')# family by default is gaussian ( linear model)
+
+summary(glm1)
+
+#AIC: 8576.3 
+#Very busy summary because of all of the categorical variables
+#Need to try and eliminate some variables
+
+#Psudeo R2
+
+  
+
+options(scipen = 999)  # gets rid of scientific notation for entire global environment
+pR2(glm1)
+# McFadden pseudo R2 0.08745389 This number is low and displays poor goodness of fit . Poor %var explained by independent variables in the model
+#Variables that are important: admission type, comorbidities 
+
+
+
+#Use Stepwise AIC to exclude variables
+glm2<-step(glm1)
+#Less categories than first glm model not using stepwise
+#Insurance variable eliminated
+#Start:  AIC=8576.3 (glm1)
+#Step:  AIC=8574.67 , better than gml1
+.
+pR2(glm2) #  McFadden 0.08677057 This number is  even lower than model 1 low and displays poor goodness of fit . Poor %var explained by independent variables in the model
+
+
+
+trctrl <- trainControl(method = "cv", number = 10)#10 fold cross validation
+
+
+#after using Stepwise selection <- train function from caret
+glm3<- train(mortality ~ ethnicity + religion + gender + admission_type + 
+    admission_location + marital_status + age + los + long_title + 
+    comorbidities,data=train_data, method = 'glm', family = 'binomial')
+# Accuracy 0.8063038
+
+
+glm3$resample#shows cross validation results
+# Accuracies ranging from app 0.79 to 0.81. no results reach 82% accuracy
+
+#pR2(glm3) # error
+
+#do another caret package model
+
+
+#Test data
+glm.prob<-predict(glm3,test_data, type = 'prob') #returns a probability for prediction
+
+#make mortality 1 or 0
+
+mortality_cm<-as.factor(ifelse(test_data$mortality == TRUE,1,0))
+
+
+#convert to classifications
+glm.prob2<-as.factor(ifelse(glm.prob[,2] > 0.5,1,0))# if over 0.5, make it 1, else make a 0
+
+#Make confusion matrix
+confusionMatrix(glm.prob2,mortality_cm,positive = '1')
+#Accuracy : 0.8089
+
+
+
+summary(glm3)
+
+#CROSS VALIDATION PLOT
+glm3$resample %>% ggplot(aes(x= Resample, y = Accuracy))+
+  geom_bar(stat= "identity", fill = "cornflowerblue")+
+  coord_flip() + theme_classic()
+# accuracy for each sample of the CV
+# This displays modeling handling data well, the model is consistent around 80% without fluctuations
+
+ggplot(data= test_data,aes(x = age , y =los, color = glm.prob2))+
+  geom_point(alpha=0.3)
+
+#Visualization : as age increases (over 65), more mortality data points ; confusion matrix only predicted 47 mortalities       
+
+ggplot(data= test_data,aes(x = age , y = comorbidities, color = glm.prob2))+  
+  geom_point(alpha=0.3)
+# Logistic regression model tends to predict mortality when the age and comorbidities are higher
+
+
+
+
+
+```
+### SUMMARY OF LOGISTIC REGRESSION MODELING:
+
+I first tried using elastic net but not able to eliminate any variables.
+I then made a model with all variables with an AIC of 8576.3.The PseduR2 for model only 0.08745389.This number is low and displays poor goodness of fit . Poor %var explained by independent variables in the model.Variables important for model 1: admission_type,age,los, long_title and comorbidities 
+
+
+Next, I used stepwise method for varaible exclusion in glm2 using AIC and elimnated the  insurance variable.
+Start:  AIC=8576.3 (glm1)
+Step:  AIC=8574.67 , better than gml1
+Removing any variable in this model increases the AIC showing that they all effect mortality but some variables are more important than the others. Removing some variables have a larger increase in the AIC than others. Religion has 5 factor variables but the AIC doesnt increase very much suggesting it could be removed. Admission_type increases the AIC more showing it is more important.
+
+I then made another model, glm3, using 10 fold cross validation with a final model Accuracy of 80.89 and AIC: 8574.7
+The accuracy is high but the sensitivity for this model is very low ( less than 5%). When looking at the confusion matrix predictions predictions, the model failed to predict the positive class correctly or with high precision. It can be dangerous in the real world to fail to diagnose for a positive disease.
+Accuracies ranging from app 0.79 to 0.81. no results reach 82% accuracy
+Variables important to mortality in glm3 are admission_type, age, los, long_title and comorbidities. 
+
+Variables important in logistic regression models: admission_type,age,los, long_title and comorbidities 
+
+lowest AIC in model with all varibales gml1 but had poor psuedo R2
+All models did not reach an accuracy of 82% or above.
+                   
+                   
+
+
+### DECISION TREES
+
+    - 7. Fit and evaluate a decision tree. Be sure to tune hyperparameters.
+
+```{r Decision Tree}
+
+#trctrl <- trainControl(method = "cv", number = 3, verboseIter = TRUE,
+                      # summaryFunction = twoClassSummary, classProbs = TRUE) #3 fold cross validation
+set.seed(7)
+
+
+dtree_fit <- train(mortality~., data = train_data, method = "rpart",
+                   parms = list(split = "information"), # splitting using AIC 
+                   trControl=trctrl,
+                   tuneLength = 10) 
+
+dtree_fit  # similiarly to LR, no accuracy above 81%
+
+plot(dtree_fit) # look for  highest point, 6th level of complexity
+# the plot points are the same as the order of the dtree_fit output
+
+dtree_fit$bestTune #6  0.002183406
+dtree_fit$resample #CV accuracies per fold
+
+test_pred <- predict(dtree_fit, newdata = test_data)
+
+
+#Accuracy 0.8105856
+
+
+
+confusionMatrix(factor(test_data$mortality), test_pred, positive = "TRUE")
+#Prediction FALSE TRUE
+     #FALSE  3242   54
+    # TRUE    719   66
+#Accuracy : 0.8106  
+#Sensitivity : 0.55000         
+#Specificity : 0.81848 
+
+#The accuracy is 0.8106 however,only 55% sensitivity. Predicting 55% are dead  when 54 dead people actually missing.That would mean in the real world that 54 people who are dead are reported alive.   Also, over 700 people would be receiving treatment they do not need.
+
+#This model has a 0.02940 mortalitly rate among people with respiratory illnesses within the data set
+
+
+
+#Alt with default control
+set.seed(7)
+dtree_fit2 <- train(mortality ~., data = train_data, method = "rpart")
+dtree_fit2 # not very different, only removed CV parameter
+#81% accuracy which is similar to model without default settings above
+
+plot(dtree_fit2) #Highest at second level of complexity
+
+test_pred2 <- predict(dtree_fit2, newdata = test_data)
+
+
+confusionMatrix(factor(test_data$mortality), test_pred2, positive="TRUE")
+#Prediction FALSE TRUE
+     #FALSE  3270   26
+     #TRUE    746   39
+# Accuracy : 0.8108   
+#Sensitivity : 0.600000
+#Specificity : 0.814243
+mean(test_pred2 == test_data$mortality) # Accuracy 0.8108307
+
+dtree_fit2$bestTune #2   cp of 0.003275109
+dtree_fit2$resample 
+
+#The accuracy is 0.8108 however,only 60% sensitivity. Predicting 60% are dead  when 26 dead people actually missing.That would mean in the real world that 26 people who are dead are reported alive. Also, over 700 people would be classifed as alive that are actually dead.
+
+#This model has a 0.015927 mortalitly rate among people with respiratory illnesses within the data set
+
+
+# Trying another tuned model with adjusted control
+set.seed(7)
+trctrl2 <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+# adjusted tuning measures to repeated cv and 10 fold 
+
+dtree_fit3 <- train(mortality ~., data = train_data, method = "rpart",
+                   parms = list(split = "information"),
+                   trControl=trctrl2, 
+                   tuneLength = 10)
+
+dtree_fit3
+
+plot(dtree_fit3)
+
+test_pred3 <- predict(dtree_fit3, newdata = test_data)
+
+
+confusionMatrix(factor(test_data$mortality), test_pred3, positive="TRUE")
+#Prediction FALSE TRUE  <-- same as tuned model1 with cv and 3 fold
+     #FALSE  3242   54
+     #TRUE    719   66
+
+#Accuracy : 0.8106           <-- same as tuned model1 with cv and 3 fold
+#Sensitivity : 0.55000         
+#Specificity : 0.81848  
+
+
+#The accuracy is 0.8106 however,only 55% sensitivity. Predicting 55% are dead  when 26 dead people actually missing.That would mean in the real world that 26 people who are dead are reported alive. Also, over 700 people would be classifed as alive that are actually dead.
+
+#This model has a 0.01617 mortalitly rate among people with respiratory illnesses within the data set
+
+#Summaries of models
+dtree_fit$finalModel
+dtree_fit2$finalModel
+dtree_fit3$finalModel
+
+
+#Model1 first tuned model with cross validation, 3 fold
+prp(dtree_fit$finalModel, box.palette = "RdYlGn")
+
+# Model2 with default settings
+prp(dtree_fit2$finalModel, box.palette = "RdYlGn") 
+
+# Model3: second tuned mode using repeated cv and 10 fold instead
+prp(dtree_fit3$finalModel, box.palette = "RdYlGn")
+
+#Variable importance
+
+#Model 1: First tuned model with cross validation, 3 fold
+varImp(dtree_fit) 
+#age   100.0000
+#los  92.6272
+#long_titleAcute Respiratory Failure  62.7474
+#long_titleChronic Airway Obstruction 60.7547
+
+# Model2 with default settings
+varImp(dtree_fit2)
+
+#los   100.000
+#age   78.036
+#long_titleAcute Respiratory Failure    61.325
+#long_titleChronic Airway Obstruction    48.098
+
+# Model3: second tuned mode using repeated cv and 10 fold instead
+varImp(dtree_fit3)
+
+#age       100.0000
+#los         92.6272
+#long_titleAcute Respiratory Failure    62.7474
+#long_titleChronic Airway Obstruction   60.7547
+
+
+```
+### SUMMARY OF DECISION TREES:
+I compared default tuning measures to two different tuned models.
+Model 2 with default settings had higher accuracy by 0.02 and a 5% better sensitivity rate than the tuned models
+The tuned models gave the same outputs despit changing tuning measures. Model1 used cross validation and 3 folds. Model 3 used repeated cv and 10 folds.
+
+Highest accuracy acheived: 0.8108
+ All three models had the same important variables: age, los and long_title (disease name).
+ 
+For the model with default settings, leng of stay (los) was most important
+For both of the tuned models: age was most important with los second
+All three models had long_title as third most important.
+All three models had long_title as root node buteach had different subcategories.
+
+The tuned models are more detailed with more branches and nodes.  
+The default: Simple compared to tuned models. 
+For the Tuned models: Many more branches, nodes and subcategories.
+
+Decision trees can be at risk for overfitting. Would like to compare to random forest to see if any better results.
+
+
+
+
+
+### RANDOM FOREST
+
+    - 8. Fit a random forest or boosting model. Be sure to tune hyperparameters
+
+```{r Random Forest}
+train_data$Mortality<- factor(ifelse(train_data$mortality== "TRUE","Yes","No"))
+test_data$Mortality<- factor(ifelse(test_data$mortality== "TRUE","Yes","No"))
+#build random forest and compare accuracy to tree
+
+#trctrl <- trainControl(method = "cv", number = 3, verboseIter = TRUE,
+                       #summaryFunction = twoClassSummary, classProbs = TRUE)
+set.seed(7)
+tunegrid <- expand.grid(.mtry=c(3, 5,7, 10))
+
+rf_fit <- train(Mortality~., data = train_data[,-12], method = "rf",
+                   trControl=trctrl,tuneGrid = tunegrid)
+
+rf_fit
+# mtry  Accuracy   Kappa     
+#  3    0.8099342  0.02315063
+#  5    0.8115102  0.08844253
+#  7    0.8088866  0.11154225
+# 10    0.8068908  0.12594597
+
+# Accuracies mostly ranging in 80% range with mtry of 5 with the highest accuracy 0.8115102.
+#no accuracies reaching up to 82% or higher, similar to Logistic regression and decision tree method
+#
+
+test_pred_rf1 <- predict(rf_fit, newdata = test_data[,-12])
+confusionMatrix((test_data$Mortality), test_pred_rf1)
+#Prediction   No  Yes
+      # No  3268   28
+      # Yes  738   47
+#Accuracy : 0.8123 
+#Sensitivity : 0.81578               
+#Specificity : 0.62667 
+
+#This model predicted 28 dead that are alive incorrectly. It also predicted 738 dead people as alive. The accuracy of the model is 0.8123. 
+
+#Variable importance for first fit
+rf_varimp<-varImp(rf_fit)
+#age  100.000
+#los   88.833
+#comorbidities     73.663
+#long_titleChronic Airway Obstruction    14.463
+
+roc_imp_rf1 <- varImp(rf_fit, scale = FALSE)
+roc_imp_rf1
+#age   397.98
+#los    354.02
+#comorbidities       294.30
+#long_titleChronic Airway Obstruction   61.26
+#genderM   61.04
+
+###Random Forest ROC
+rf_fit_roc<- train(Mortality~., data = train_data[,-12], method = "rf",preProc=c("center", "scale"),
+                trControl=trctrl,tuneGrid = tunegrid)
+print(rf_fit_roc)
+
+#ROC        Sens       Spec      
+#0.6825451  0.9990897  0.01474222
+#This ROC output is fair. Ideally, the ROC would be closer to 1. The sensitivity is high but specificity low.
+
+
+
+
+set.seed(7)
+# Comparing random forest package to caret package
+rf_package <- randomForest(Mortality~., data = train_data[,-12], mtry=5) # default number of trees 500  with mtry of 5
+names(train_data)
+#talk about different between two package outputs between caret and random forest
+dim(test_data)
+test_pred_rf2 <- predict(rf_package, newdata = test_data[,-12])
+confusionMatrix(test_data$Mortality,test_pred_rf2)
+#          Reference
+#Prediction   No  Yes
+      # No  3193  103
+       #Yes  693   92
+
+# This model predicts 103 people that are actually alive are dead. It also mislables 693 who are dead as alive.
+#Accuracy : 0.8052  
+#Sensitivity : 0.8225             
+#Specificity : 0.4755 
+#There is an imbalance between sensitivity and specificity.
+
+
+ 
+
+rf_package$importance %>% data.frame() %>% mutate(feature = row.names(.)) %>%
+  ggplot(aes(x=reorder(feature, MeanDecreaseGini), y=MeanDecreaseGini)) +
+  geom_col(stat= "identity", fill = "salmon2") + coord_flip() + xlab('Feature')+ theme_gray()
+
+
+#top important variables: Age, los, comorbidites
+#this model does not have long_title in top importance compared to other models
+varImp(rf_package)
+#Random Forest package most important variables
+#age                714.89632
+#los                519.95730
+#comorbidities      435.92748
+#religion           269.74847
+
+
+
+
+#Trying another caret package model example not using finer tuning measures to see if accuracy improves.
+
+####
+
+control <- trainControl(method="repeatedcv", number=3, repeats=3, search="grid")
+tunegrid <- expand.grid(.mtry=c(sqrt(ncol(x))))
+modellist <- list()
+for (ntree in c(1000, 1500, 2000, 2500)) {
+  set.seed(7)
+  fit <- train(Mortality~., data=train_data[,-12], method="rf", metric="Accuracy", tuneGrid=tunegrid, trControl=control, ntree=ntree)
+  key <- toString(ntree)
+  modellist[[key]] <- fit
+}
+
+print(fit)
+#Accuracy   Kappa  
+#0.8097238  0.02055289
+
+# compare results
+results <- resamples(modellist)
+summary(results)
+
+test_pred_rf3 <- predict(fit, newdata = test_data[,-12])
+confusionMatrix((test_data$Mortality), test_pred_rf3)
+#         Reference
+#Prediction   No  Yes
+#       No  3292    4
+#       Yes  775   10
+
+# This model predicts on a small number of people ,4, people that are actually alive are dead. It  mislables 775 who are dead as alive.
+#Accuracy : 0.8091 
+#Sensitivity : 0.80944            
+#Specificity : 0.71429 
+
+#This model so far has the best balance of sensitivity and specificity
+
+varImp(fit)
+
+#age   100.000
+#los   97.837
+#comorbidities   79.644
+#long_titleChronic Airway Obstruction   28.384
+#long_titleAcute Respiratory Failure    24.470
+
+fit3roc_imp3<- varImp(fit, scale = FALSE)
+print(fit3roc_imp3)
+#age                                          174.84
+#los                                          171.13
+#comorbidities                                139.91
+#long_titleChronic Airway Obstruction          51.94
+#long_titleAcute Respiratory Failure           45.22
+#genderM                                       27.70
+
+
+
+
+rf_varimp<-varImp(rf_fit)
+#age  100.000
+#los   88.833
+#comorbidities     73.663
+#long_titleChronic Airway Obstruction    14.463
+
+
+
+
+```
+
+I compared two models using the caret package and one model using the randomForest package.
+
+-Model 1: This model is  using the caret package tuned using cross validation  3 fold .No accuracies reaching up to 82% or higher, similar to Logistic regression and decision tree method.This model predicted 28 dead that are alive incorrectly. It also predicted 738 dead people as alive. The model has an Accuracy  of 0.8123 , a sensitivity of 0.81578 and Specificity : 0.62667. Not a great balance between sensitivity and specificity. Variable importance for Age, los and comorbidities important factors affecting mortality same as in LG and DT however, long_title displaying less importance. Gender is shown to have an affect on mortaltiy.
+
+-Model 2: This model uses randomForest package. This model predicts 103 people that are actually alive are dead. It also mislables 693 who are dead as alive.# This model predicts 103 people that are actually alive are dead. It also mislables 693 who are dead as alive. The model has an Accuracy : 0.8052, a Sensitivity : 0.8225 and a Specificity : 0.4755. This model is even more unbalanced between the sensitivity and specificity and also a lower accuracy than model one.#top important variables: Age, los, comorbidites. This model does not have long_title in top importance compared to other models, it instead has religion.
+
+-Model 3:Tried 3rd model even more fine tuned and was the model.This model used repeated cross validation 3 folds with 3 repeats. The mtry was adjusted to the square root of ncol(x) and a for loop of ntree including 1000, 1500, 2000, 2500 trees instead of default of 500.
+This finer tuned model has the same top variables are the other first fit with caret package and the fit using random forest package. The model's important factors affecting mortality are age, los, comorbidities. This is the first model out of all of my exploration that had male gender as important. In my EDA, I saw that more males than females die in the data set. There are also a higher proportion of men in the data set.The model's output has an Accuracy of 0.8091, a Sensitivity of 0.80944, and Specificity : 0.71429 
+This model so far has the best balance of sensitivity and specificity. 
+This 3rd fit of random forest modeling is the best fit for the data set tried.
+
+
+
+## SUMMARY OF ALL ANALYSIS
+
+    - 9. Briefly summarize your findings, including a few sentences stating what your plots reveal and evaluating/comparing your models.
+
+
+
+## SUMMARY OF EDA AND MODELS
+
+### Summary of EDA
+In my exploratory data analysis, I saw the factors affecting mortality are admission type, age, long_title (disease name),comorbidities and los. Length of stay did not show as important in correlation plot, but in other plots did display as important.The EDA  displayed that within the data set, mortaltiy is not affected by ethnicity, insurance, religion, gender, admission_location, marital_status.
+
+
+
+Gender was very interesting to me. There are more men in the data set indicating that respiratory diseases affecting more men. Within each gender the mortality rate the same. This if very important when considering risk factors for mortality. It is seems,from this data set, that more men are hospitalized for respiratory illnesses than women even though mortality rate is the same.
+
+
+### Summary of Modeling 
+
+
+Out of all of the models the common factors that effect mortality are age, los, and long_title ( the title of the respiratory disease).
+Different models recommend what variables are the most important. However they do have a set of importanct variables that appear in all models. The numeric variables seem to affect mortality the most within the model. Age has been the strongest varibale affecting mortality within the data set. The number of comorbidities also strongly affect mortality within all of the models. The name of the disease, long_title, often displayed as important within the models.Religion shows as slighly affecting mortaltiy. Random forest Male gender affects mortaltiy in the random forest models. Variables not affecting mortality much within models includes ethnicity, insurance, admission_location, marital_status, and admission_type.
+
+Based on this modeling and exploritory analysis, it suggests can predict the outcome of mortality status if we have information about important variables such as age, illness, length of hospital stay and the number of other health problems the individuals has.
+
+Out of all of the models, random forest modeling with the most tuning measures gave me the best modeling with the most balance between accuracy, sensitivity and specificity.
+
+
+### Limitations
+
+This data had limitations. It contained mostly categorical varaibles and was challanging to analyze compare to numeric variables as there were not many.Categorical data is meaningful and informative but having more numerical data to compare with it may give more complete picture of what effects the target variables.This data set had very few numeric variables and had many. I feel further exploration of the effect of mortality to respiratory illnessess, more numeric variables are needed. This data set contained mostly white males. I feel a more diverse population would give us more meaningful information on the relationship between respiratory diseases and mortality.
+
+### My experience
+My expirience was that logistic regression was the easiest to interpret.Decision trees are also easy to interpret but neither logisitc regression or decision trees were more accurate, sensitive or specific as random forest.Random forest was my favorite method, as it was the my best model. However, it took the most runtime. Logistic regression and decision trees ran faster but I was not able to get a good enough model.
+  
+
+
+### What I learned overall
+Tuning can help improve modeling. You can continue making tuning modification but there is such a thing as overworking.Even with much tuning, there can be limitations to the data itself. As I examine which model is the best for a data set, it is important to consider  not only the accuracy but also the specificity and sensitivity and consider what tradeoff am I willing to accept.
+
+### For the future
+If I were to do future work, I would consider using more numeric variables within the data set. Even though there were only a few (age, los, and comorbidities), they continued to show as the most imporant factors throughout all the exploration of EDA and Modeling.
